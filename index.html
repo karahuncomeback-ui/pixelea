@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pixelea - Ultra Detaylı Dünya Tuvali</title>
+  <title>Pixelea - Canlı Dünya Tuvali</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; background-color: #0b0f19; color: #fff; }
@@ -49,7 +49,6 @@
     const coordsText = document.getElementById('coords');
     const zoomText = document.getElementById('zoomLevel');
 
-    // Devasa çözünürlük ile minicik 1x1 pikseller elde ediyoruz
     const GRID_WIDTH = 4000;
     const GRID_HEIGHT = 2000;
     const pixelData = new Map();
@@ -59,7 +58,6 @@
     let offsetY = 0;
     let isDragging = false, startX = 0, startY = 0, hasMoved = false;
 
-    // Deniz kontrolü için arka planda gizli harita analizi
     const mapCanvas = document.createElement('canvas');
     mapCanvas.width = GRID_WIDTH;
     mapCanvas.height = GRID_HEIGHT;
@@ -68,10 +66,10 @@
     const worldMapImg = new Image();
     worldMapImg.crossOrigin = "anonymous";
     worldMapImg.src = 'https://upload.wikimedia.org/wikipedia/commons/e/ec/World_map_blank_without_borders.svg';
-
+    
     worldMapImg.onload = () => {
       mapCtx.drawImage(worldMapImg, 0, 0, GRID_WIDTH, GRID_HEIGHT);
-      draw();
+      loadPixels(); // Sayfa açılınca veritabanından pikselleri çek
     };
 
     function init() {
@@ -88,11 +86,25 @@
       draw();
     });
 
-    // Tıklanan yerin kara (ülke) olup olmadığını kontrol eden fonksiyon
+    // Veritabanından pikselleri yükleme fonksiyonu
+    async function loadPixels() {
+      try {
+        const res = await fetch('/api/pixels');
+        const data = await res.json();
+        pixelData.clear();
+        Object.keys(data).forEach(key => {
+          pixelData.set(key, data[key]);
+        });
+        draw();
+      } catch (e) {
+        console.error("Pikseller yüklenemedi:", e);
+      }
+    }
+
     function isLand(x, y) {
       if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return false;
       const pixel = mapCtx.getImageData(x, y, 1, 1).data;
-      return pixel[3] > 20; // Eğer şeffaf değilse karadır
+      return pixel[3] > 20;
     }
 
     function draw() {
@@ -103,25 +115,21 @@
       ctx.translate(offsetX, offsetY);
       ctx.scale(scale, scale);
 
-      // Okyanus Arka Planı
       ctx.fillStyle = "#101826";
       ctx.fillRect(0, 0, GRID_WIDTH, GRID_HEIGHT);
 
-      // Dünya Haritası Resmi
       if (worldMapImg.complete) {
         ctx.globalAlpha = 0.35;
         ctx.drawImage(worldMapImg, 0, 0, GRID_WIDTH, GRID_HEIGHT);
         ctx.globalAlpha = 1.0;
       }
 
-      // Oyuncu Pikselleri (1x1)
       pixelData.forEach((color, key) => {
         const [x, y] = key.split(',').map(Number);
         ctx.fillStyle = color;
         ctx.fillRect(x, y, 1, 1);
       });
 
-      // Çerçeve
       ctx.strokeStyle = "#3498db";
       ctx.lineWidth = 1 / scale;
       ctx.strokeRect(0, 0, GRID_WIDTH, GRID_HEIGHT);
@@ -130,13 +138,12 @@
       zoomText.innerText = `${Math.round(scale * 100)}%`;
     }
 
-    // Fare Kontrolleri
     container.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        isDragging = true;
-        hasMoved = false;
-        startX = e.clientX - offsetX;
-        startY = e.clientY - offsetY;
+      if (e.button === 0) { 
+        isDragging = true; 
+        hasMoved = false; 
+        startX = e.clientX - offsetX; 
+        startY = e.clientY - offsetY; 
       }
     });
 
@@ -155,12 +162,12 @@
       if (Math.abs(dx - offsetX) > 3 || Math.abs(dy - offsetY) > 3) {
         hasMoved = true;
       }
-      offsetX = dx;
+      offsetX = dx; 
       offsetY = dy;
       draw();
     });
 
-    window.addEventListener('mouseup', (e) => {
+    window.addEventListener('mouseup', async (e) => {
       if (!isDragging) return;
       isDragging = false;
 
@@ -169,10 +176,21 @@
         const gridY = Math.floor((e.clientY - offsetY) / scale);
 
         if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT) {
-          // Sadece kara (ülke) üzerindeyse piksel koyulmasına izin ver
           if (isLand(gridX, gridY)) {
-            pixelData.set(`${gridX},${gridY}`, colorPicker.value);
+            const color = colorPicker.value;
+            pixelData.set(`${gridX},${gridY}`, color);
             draw();
+
+            // Pikseli anında veritabanına gönder (POST)
+            try {
+              await fetch('/api/pixels', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ x: gridX, y: gridY, color })
+              });
+            } catch (err) {
+              console.error("Piksel kaydedilemedi:", err);
+            }
           }
         }
       }
@@ -195,6 +213,9 @@
     }, { passive: false });
 
     init();
+
+    // Her 3 saniyede bir veritabanını kontrol et (Canlı Eşitleme)
+    setInterval(loadPixels, 3000);
   </script>
 </body>
 </html>
