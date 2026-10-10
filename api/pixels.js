@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -11,9 +11,10 @@ export default async function handler(req, res) {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
-    return res.status(500).json({ error: "Veritabanı bağlantı bilgileri eksik." });
+    return res.status(500).json({ error: "Veritabanı bağlantı bilgileri eksik (Environment Variables kontrol et)." });
   }
 
+  // Pikselleri Veritabanından Çek (GET)
   if (req.method === 'GET') {
     try {
       const response = await fetch(`${url}/hgetall/pixels`, {
@@ -27,10 +28,11 @@ export default async function handler(req, res) {
       }
       return res.status(200).json(pixels);
     } catch (err) {
-      return res.status(500).json({ eror: err.message });
+      return res.status(500).json({ error: err.message });
     }
   }
 
+  // Yeni Pikseli Veritabanına Kaydet (POST)
   if (req.method === 'POST') {
     const { x, y, color } = req.body;
     if (x === undefined || y === undefined || !color) {
