@@ -11,20 +11,22 @@ export default async function handler(req, res) {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
-    return res.status(500).json({ error: "Veritabanı bağlantı bilgileri eksik (Environment Variables kontrol et)." });
+    return res.status(500).json({ error: "Environment variables eksik!" });
   }
 
-  // Pikselleri Veritabanından Çek (GET)
+  // GET: Tüm pikselleri getir
   if (req.method === 'GET') {
     try {
       const response = await fetch(`${url}/hgetall/pixels`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await response.json();
-      const result = data.result || [];
+      
       const pixels = {};
-      for (let i = 0; i < result.length; i += 2) {
-        pixels[result[i]] = result[i + 1];
+      if (data.result && Array.isArray(data.result)) {
+        for (let i = 0; i < data.result.length; i += 2) {
+          pixels[data.result[i]] = data.result[i + 1];
+        }
       }
       return res.status(200).json(pixels);
     } catch (err) {
@@ -32,17 +34,17 @@ export default async function handler(req, res) {
     }
   }
 
-  // Yeni Pikseli Veritabanına Kaydet (POST)
+  // POST: Piksel kaydet
   if (req.method === 'POST') {
     const { x, y, color } = req.body;
     if (x === undefined || y === undefined || !color) {
-      return res.status(400).json({ error: "Eksik parametre" });
+      return res.status(400).json({ error: "Eksik veri" });
     }
     try {
       await fetch(`${url}/hset/pixels/${x},${y}/${encodeURIComponent(color)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      return res.status(200).json({ success: true, x, y, color });
+      return res.status(200).json({ success: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
